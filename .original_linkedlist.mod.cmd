@@ -1,0 +1,1 @@
+cmd_/home/sangwoo/git/LinuxKernelMultiThreading/original_linkedlist.mod := { echo  /home/sangwoo/git/LinuxKernelMultiThreading/original_linkedlist.o; echo; } > /home/sangwoo/git/LinuxKernelMultiThreading/original_linkedlist.mod

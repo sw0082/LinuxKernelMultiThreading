@@ -11,9 +11,9 @@
 #include <linux/random.h>
 
 #define NUM_OF_ITERS 100
-#define NUM_OF_THREAD 4
+#define NUM_OF_THREADS 1
 #define BILLION 1000000
-#define KEY_RANGE = 1000;
+#define KEY_RANGE 1000
 
 #define list_for_each(pos, head) \
 	for (pos = (head)->next; pos != (head); pos = pos -> next)
@@ -33,8 +33,12 @@ struct list_head my_list;
 struct my_node *current_node;
 struct list_head *p;
 
+struct mutex my_mutex;
+int finishthread;
 
-unsigned long long calclock3(struct timespec *spclock){
+struct task_struct *k_thread[NUM_OF_THREADS];
+
+unsigned long long calclock(struct timespec *spclock){
 	long temp, temp_n;
 	unsigned long long timedelay = 0;
 	if(spclock[1].tv_nsec >= spclock[0].tv_nsec){
@@ -51,21 +55,63 @@ unsigned long long calclock3(struct timespec *spclock){
 	return timedelay;
 }
 
+int addlist(int key){
+	struct my_node *new = kmalloc(sizeof(struct my_node), GFP_KERNEL);
+	new->data = key;
+	
+	mutex_lock(&my_mutex);
+	list_for_each_entry(current_node, &my_list, list){
+		if(current_node == key) {
+			mutex_unlock(&my_mutex);
+			return 0;
+		}
+	}
+	list_add_tail(&new->list, &my_list);
+	mutex_unlock(&my_mutex);
+	
+	return 1;
+}
 
+int removelist(int key){
+	struct my_node *tmp;
+	
+	mutex_lock(&my_mutex);
+	list_for_each_entry_safe(current_node, tmp, &my_list, list){
+		if(current_node->data == key){
+			list_del(&current_node->list);
+			kfree(current_node);
+			mutex_unlock(&my_mutex);
+			return 1;
+		}
+	}
+	mutex_unlock(&my_mutex);
+	
+	return 0;
+}
 
-
-
-
+int containlist(int key){
+	mutex_lock(&my_mutex);
+	list_for_each_entry(current_node, &my_list, list){
+		if(current_node == key) {
+			mutex_unlock(&my_mutex);
+			return 1;
+		}
+	}
+	
+	mutex_lock(&my_mutex);
+	return 0;
+}
 
 
 
 void ThreadFunc(void *data){
 	int*arg = (int*)data;
 	
-	int i, n;
+	int i;
+	int n;
 	int key;
-	for(int i = 0; i < NUM__OF_ITERS; i++){
-		n = get_random_bytes(&n, sizeof(int));
+	for(i = 0; i < NUM_OF_ITERS; i++){
+		get_random_bytes(&n, sizeof(int));
 		key = n % KEY_RANGE;
 		switch(n % 3){
 		case 0: 
@@ -75,7 +121,7 @@ void ThreadFunc(void *data){
 			removelist(key);
 			break;
 		case 2: 
-			containslist(key);
+			containlist(key);
 			break;
 		default:
 			printk("Error");
@@ -90,30 +136,29 @@ void ThreadFunc(void *data){
 
 
 
-int test(){
+int test(void){
 	INIT_LIST_HEAD(&my_list);
-	pthread_t p_thread[16];
+	int thr_id;
 	struct timespec spclock[2];
 	
 	//for(int tot_thread = 1; tot_thread <= 16; tot_thread *= 2){
 	sum = 0;
+	mutex_init(&my_mutex);
 	
 	getnstimeofday(&spclock[0]);
 	 
 	 int i;
-	 for(i = 0; i < NUM_OF_THREAD; i++){
+	 for(i = 0; i < NUM_OF_THREADS; i++){
 	 	int* arg = (int*)kmalloc(sizeof(int), GFP_KERNEL);
 		*arg = i;
-	 	thr_id = pthread_create(&p_thread[i], NULL, ThreadFunc, (void*)arg);
-	 	
-	 	if(thr_ic < 0){
-	 		perror("thread create error: ");
-	 		return -1;
-	 	}
 	 }
 	
-	for(i = 0; i < NUM_OF_THREAD; i++){
-		pthread_join(p_thread[i], (void **)&status);
+	while(true){
+		if(finishthread == NUM_OF_THREADS){
+			getnstimeofday(&spclock[1]);
+			break;
+		}
+		msleep(1);
 	}
 	
 	getnstimeofday(&spclock[1]);
