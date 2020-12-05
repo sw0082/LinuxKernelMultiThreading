@@ -55,7 +55,9 @@ unsigned long long calclock(struct timespec *spclock){
 	return timedelay;
 }
 
-int addlist(int key){
+int addlist(int key, void *data){
+	int*arg = (int*)data;
+	
 	struct my_node *new = kmalloc(sizeof(struct my_node), GFP_KERNEL);
 	new->data = key;
 	
@@ -67,21 +69,25 @@ int addlist(int key){
 		}
 	}
 	list_add_tail(&new->list, &my_list);
+	printk("Add list, key: %d, thread %d", key, *arg);
 	mutex_unlock(&my_mutex);
 	
-	return 1;
+	return 0;
 }
 
-int removelist(int key){
+int removelist(int key, void *data){
+	int*arg = (int*)data;
+
 	struct my_node *tmp;
 	
 	mutex_lock(&my_mutex);
 	list_for_each_entry_safe(current_node, tmp, &my_list, list){
 		if(current_node->data == key){
+			printk("Delete list, key: %d, thread %d", key, *arg);
 			list_del(&current_node->list);
 			kfree(current_node);
 			mutex_unlock(&my_mutex);
-			return 1;
+			return 0;
 		}
 	}
 	mutex_unlock(&my_mutex);
@@ -89,12 +95,15 @@ int removelist(int key){
 	return 0;
 }
 
-int containlist(int key){
+int containlist(int key, void *data){
+	int*arg = (int*)data;
+	
 	mutex_lock(&my_mutex);
 	list_for_each_entry(current_node, &my_list, list){
 		if(current_node == key) {
+			printk("Contain list, key: %d, thread %d", key, *arg);
 			mutex_unlock(&my_mutex);
-			return 1;
+			return 0;
 		}
 	}
 	
@@ -104,7 +113,7 @@ int containlist(int key){
 
 
 
-void ThreadFunc(void *data){
+int ThreadFunc(void *data){
 	int*arg = (int*)data;
 	
 	int i;
@@ -113,15 +122,18 @@ void ThreadFunc(void *data){
 	for(i = 0; i < NUM_OF_ITERS; i++){
 		get_random_bytes(&n, sizeof(int));
 		key = n % KEY_RANGE;
+		if(key < 0) key = -key;
+		printk("key: %d", key);
+		
 		switch(n % 3){
 		case 0: 
-			addlist(key);
+			addlist(key, (void*)arg);
 			break;
 		case 1: 
-			removelist(key);
+			removelist(key, (void*)arg);
 			break;
 		case 2: 
-			containlist(key);
+			containlist(key, (void*)arg);
 			break;
 		default:
 			printk("Error");
@@ -129,8 +141,9 @@ void ThreadFunc(void *data){
 		
 		}
 	}
-	
+	finishthread++;
 	kfree(arg);
+	return 0;
 }
 
 
@@ -151,7 +164,10 @@ int test(void){
 	 for(i = 0; i < NUM_OF_THREADS; i++){
 	 	int* arg = (int*)kmalloc(sizeof(int), GFP_KERNEL);
 		*arg = i;
+		kthread_run(&ThreadFunc, (void*)arg, "ThreadFunc");
 	 }
+	
+	
 	
 	while(true){
 		if(finishthread == NUM_OF_THREADS){
