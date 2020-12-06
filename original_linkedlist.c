@@ -48,7 +48,7 @@ unsigned long long calclock(struct timespec *spclock){
 	}
 	else {
 		temp = spclock[1].tv_sec - spclock[0].tv_sec - 1;
-		temp_n = BILLION + spclock[1].tv_nsec - spclock[0].tv_nsec;
+		temp_n = 1000000000 + spclock[1].tv_nsec - spclock[0].tv_nsec;
 		timedelay = BILLION * temp + temp_n;
 	}
 	
