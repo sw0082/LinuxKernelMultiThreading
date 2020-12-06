@@ -80,12 +80,12 @@ unsigned long long calclock(struct timespec *spclock){
 	if(spclock[1].tv_nsec >= spclock[0].tv_nsec){
 		temp = spclock[1].tv_sec - spclock[0].tv_sec;
 		temp_n = spclock[1].tv_nsec - spclock[0].tv_nsec;
-		timedelay = BILLION/1000 * temp + temp_n/1000;
+		timedelay = BILLION * temp + temp_n;
 	}
 	else {
 		temp = spclock[1].tv_sec - spclock[0].tv_sec - 1;
 		temp_n = 1000000000 + spclock[1].tv_nsec - spclock[0].tv_nsec;
-		timedelay = BILLION/1000 * temp + temp_n/1000;
+		timedelay = BILLION * temp + temp_n;
 	}
 	
 	return timedelay;
@@ -115,20 +115,23 @@ int addlist(int key, void *data){
 			mutex_unlock(&curr->nlock);
 			mutex_unlock(&pred->nlock);
 			return 0;
+		} else {
+			//printk("13");
+			struct my_node *new = kmalloc(sizeof(struct my_node), GFP_KERNEL);
+			new->data = key;
+			new->next = curr;
+			pred->next = new;
+			mutex_init(&new->nlock);
+			//printk("13");
+			mutex_unlock(&curr->nlock);
+			mutex_unlock(&pred->nlock);
+			//printk("Add list, key: %d, thread %d", key, *arg);
+			return 0;
 		}
-	} else {
-		printk("13");
-		struct my_node *new = kmalloc(sizeof(struct my_node), GFP_KERNEL);
-		new->data = key;
-		new->next = curr;
-		pred->next = new;
-		mutex_init(&new->nlock);
-		printk("13");
-		mutex_unlock(&curr->nlock);
-		mutex_unlock(&pred->nlock);
-		printk("Add list, key: %d, thread %d", key, *arg);
-		return 0;
 	}
+	mutex_unlock(&curr->nlock);
+	mutex_unlock(&pred->nlock);
+	return 0;
 }
 
 /*
@@ -256,7 +259,7 @@ int test(void){
 		}
 		
 		getnstimeofday(&spclock[1]);
-		printk("Thread[%d], total_times: %15llums\n", tot_thread, calclock(spclock));
+		printk("Thread[%2d], total_times: %15llums\n", tot_thread, calclock(spclock));
 		
 	}
 	
