@@ -9,8 +9,9 @@
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/random.h>
+#include <linux/atomic.h>
 
-#define NUM_OF_ITERS 25
+#define NUM_OF_ITERS 10000
 #define NUM_OF_THREADS 1
 #define BILLION 1000000
 #define KEY_RANGE 1000
@@ -22,11 +23,25 @@
 	for (pos = list_first_entry(head, typeof(*pos), member); \
 	&pos->member != (head); \
 	pos = list_next_entry(pos, member))
+struct mutex nlock;
 	
 struct my_node {
 	struct my_node *next;
 	int data;
+	
+	//int (*lock)(void);
+	//int (*unlock)(void);
 };
+
+int mlock(void){
+	mutex_lock(&nlock);
+	return 0;
+}
+
+int munlock(void){
+	mutex_unlock(&nlock);
+	return 0;
+}
 
 volatile int sum;
 struct list_head my_list;
@@ -53,22 +68,13 @@ void recycle_freelist(){
 }*/
 
 void init(struct list_head *list){
-	printk("5");
 	head = kmalloc(sizeof(struct my_node), GFP_KERNEL);
 	tail = kmalloc(sizeof(struct my_node), GFP_KERNEL);
 	head->data = 0x80000000;
 	tail->data = 0x7FFFFFFF;
-	printk("6");
+	
 	struct my_node *ptr = kmalloc(sizeof(struct my_node), GFP_KERNEL);
-	printk("7");
 	head->next = tail;
-	printk("8");
-	/*while(head->next != &tail){
-		ptr = head->next;
-		head->next = head -> next -> next;
-		kfree(ptr);
-	}*/
-	printk("9");
 }
 
 unsigned long long calclock(struct timespec *spclock){
@@ -90,30 +96,25 @@ unsigned long long calclock(struct timespec *spclock){
 
 int addlist(int key, void *data){
 	int*arg = (int*)data;
-	
+	printk("8");
 	struct my_node *pred;
 	struct my_node *curr;
-	printk("10");
+	printk("9");
 	pred = head;
-	printk("11");
-	mutex_lock(&my_mutex);
 	
 	curr = pred->next;
-	printk("12");
 	while(curr->data < key){
-		pred = curr;
 		if(curr->data == 0x7FFFFFFF) break;
+		pred = curr;
 		curr = curr->next;
 	}
-	printk("13");
+	
 	if(key == curr->data){
 		mutex_unlock(&my_mutex);
 		return 0;
 	}
 	else{
-		printk("14");
 		struct my_node *new = kmalloc(sizeof(struct my_node), GFP_KERNEL);
-		printk("15");
 		new->data = key;
 		new->next = curr;
 		pred->next = new;
@@ -129,22 +130,20 @@ int removelist(int key, void *data){
 
 	struct my_node *pred;
 	struct my_node *curr;
-	printk("16");
+	printk("6");
+	printk("7");
 	pred = head;
 	mutex_lock(&my_mutex);
 	
 	curr = pred->next;
-	printk("17");
 	while(curr->data < key){
 		pred = curr;
 		if(curr->data == 0x7FFFFFFF) break;
 		curr = curr->next;
 	}
 	if(key == curr->data){
-		printk("18");
 		pred->next = curr->next;
 		kfree(curr);
-		printk("19");
 		mutex_unlock(&my_mutex);
 		return 0;
 	}
@@ -159,27 +158,22 @@ int containlist(int key, void *data){
 	int*arg = (int*)data;
 	struct my_node *pred;
 	struct my_node *curr;
-	printk("20");
+	printk("4");
+	printk("5");
 	pred = head;
-	printk("21");
 	mutex_lock(&my_mutex);
 
 	curr = pred->next;
-	printk("22");
 	while(curr->data < key){
-		printk("23");
 		pred = curr;
 		if(curr->data == 0x7FFFFFFF) break;
 		curr = curr->next;
-		printk("24");
 	}
 	if(key == curr->data){
-		printk("25");
 		mutex_unlock(&my_mutex);
 		return 0;
 	}
 	else{
-		printk("26");
 		mutex_unlock(&my_mutex);
 		return 0;
 	}
@@ -197,7 +191,7 @@ int ThreadFunc(void *data){
 		key = n % KEY_RANGE;
 		if(key < 0) key = -key;
 		//printk("key: %d", key);
-		
+		printk("3");
 		switch(key % 3){
 		case 0: 
 			addlist(key, (void*)arg);
@@ -226,19 +220,17 @@ int test(void){
 	int thr_id;
 	struct timespec spclock[2];
 	struct timeval start, end;
-	
+	printk("0");
+
 	printk("1");
 	mutex_init(&my_mutex);
-	printk("2");
 	int tot_thread;
 	for(tot_thread = 1; tot_thread <= 32; tot_thread *= 2){
 		init(&my_list);
-		printk("3");
 		init(&freelist);
-		printk("4");
 		finishthread = 0;
 		
-		
+		printk("2");
 		mutex_lock(&my_mutex);
 		getnstimeofday(&spclock[0]);
 		mutex_unlock(&my_mutex);
@@ -267,12 +259,12 @@ int test(void){
 		mutex_unlock(&my_mutex);
 	}
 	
-	struct my_node *p = head -> next;
+	/*struct my_node *p = head -> next;
 	while(p != &tail){
 		printk("%d\n", p->data);
 		if(p->data == 0x7FFFFFFF) break;
 		p = p->next;
-	}
+	}*/
 	return 0;
 }
 
