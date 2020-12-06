@@ -10,7 +10,7 @@
 #include <linux/mutex.h>
 #include <linux/random.h>
 
-#define NUM_OF_ITERS 100
+#define NUM_OF_ITERS 25
 #define NUM_OF_THREADS 1
 #define BILLION 1000000
 #define KEY_RANGE 1000
@@ -24,19 +24,52 @@
 	pos = list_next_entry(pos, member))
 	
 struct my_node {
-	struct list_head list;
+	struct my_node *next;
 	int data;
 };
 
 volatile int sum;
 struct list_head my_list;
+struct list_head freelist;
 struct my_node *current_node;
 struct list_head *p;
 
+struct my_node *head;
+struct my_node *tail;
 struct mutex my_mutex;
+
 int finishthread;
+int marked;
 
 struct task_struct *k_thread[NUM_OF_THREADS];
+
+/*bool validate(pred, curr){
+	if(pred->marked != 0 && curr->marked != 0 && pred->next == curr) return true;
+	else return false;
+}
+
+void recycle_freelist(){
+	struct my_node *tmp = freelist;
+}*/
+
+void init(struct list_head *list){
+	printk("5");
+	head = kmalloc(sizeof(struct my_node), GFP_KERNEL);
+	tail = kmalloc(sizeof(struct my_node), GFP_KERNEL);
+	head->data = 0x80000000;
+	tail->data = 0x7FFFFFFF;
+	printk("6");
+	struct my_node *ptr = kmalloc(sizeof(struct my_node), GFP_KERNEL);
+	printk("7");
+	head->next = tail;
+	printk("8");
+	/*while(head->next != &tail){
+		ptr = head->next;
+		head->next = head -> next -> next;
+		kfree(ptr);
+	}*/
+	printk("9");
+}
 
 unsigned long long calclock(struct timespec *spclock){
 	long temp, temp_n;
@@ -44,12 +77,12 @@ unsigned long long calclock(struct timespec *spclock){
 	if(spclock[1].tv_nsec >= spclock[0].tv_nsec){
 		temp = spclock[1].tv_sec - spclock[0].tv_sec;
 		temp_n = spclock[1].tv_nsec - spclock[0].tv_nsec;
-		timedelay = BILLION * temp + temp_n;
+		timedelay = BILLION/1000 * temp + temp_n/1000;
 	}
 	else {
 		temp = spclock[1].tv_sec - spclock[0].tv_sec - 1;
 		temp_n = BILLION + spclock[1].tv_nsec - spclock[0].tv_nsec;
-		timedelay = BILLION * temp + temp_n;
+		timedelay = BILLION/1000 * temp + temp_n/1000;
 	}
 	
 	return timedelay;
@@ -58,58 +91,100 @@ unsigned long long calclock(struct timespec *spclock){
 int addlist(int key, void *data){
 	int*arg = (int*)data;
 	
-	struct my_node *new = kmalloc(sizeof(struct my_node), GFP_KERNEL);
-	new->data = key;
-	
+	struct my_node *pred;
+	struct my_node *curr;
+	printk("10");
+	pred = head;
+	printk("11");
 	mutex_lock(&my_mutex);
-	list_for_each_entry(current_node, &my_list, list){
-		if(current_node == key) {
-			mutex_unlock(&my_mutex);
-			return 1;
-		}
-	}
-	list_add_tail(&new->list, &my_list);
-	printk("Add list, key: %d, thread %d", key, *arg);
-	mutex_unlock(&my_mutex);
 	
-	return 0;
+	curr = pred->next;
+	printk("12");
+	while(curr->data < key){
+		pred = curr;
+		if(curr->data == 0x7FFFFFFF) break;
+		curr = curr->next;
+	}
+	printk("13");
+	if(key == curr->data){
+		mutex_unlock(&my_mutex);
+		return 0;
+	}
+	else{
+		printk("14");
+		struct my_node *new = kmalloc(sizeof(struct my_node), GFP_KERNEL);
+		printk("15");
+		new->data = key;
+		new->next = curr;
+		pred->next = new;
+		//printk("Add list, key: %d, thread %d", key, *arg);
+		mutex_unlock(&my_mutex);
+		return 0;
+	}
 }
+
 
 int removelist(int key, void *data){
 	int*arg = (int*)data;
 
-	struct my_node *tmp;
-	
+	struct my_node *pred;
+	struct my_node *curr;
+	printk("16");
+	pred = head;
 	mutex_lock(&my_mutex);
-	list_for_each_entry_safe(current_node, tmp, &my_list, list){
-		if(current_node->data == key){
-			list_del(&current_node->list);
-			kfree(current_node);
-			mutex_unlock(&my_mutex);
-			return 1;
-		}
-	}
-	mutex_unlock(&my_mutex);
 	
-	return 0;
+	curr = pred->next;
+	printk("17");
+	while(curr->data < key){
+		pred = curr;
+		if(curr->data == 0x7FFFFFFF) break;
+		curr = curr->next;
+	}
+	if(key == curr->data){
+		printk("18");
+		pred->next = curr->next;
+		kfree(curr);
+		printk("19");
+		mutex_unlock(&my_mutex);
+		return 0;
+	}
+	else{
+		mutex_unlock(&my_mutex);
+		return 0;
+	}
 }
+	
 
 int containlist(int key, void *data){
 	int*arg = (int*)data;
-	
+	struct my_node *pred;
+	struct my_node *curr;
+	printk("20");
+	pred = head;
+	printk("21");
 	mutex_lock(&my_mutex);
-	list_for_each_entry(current_node, &my_list, list){
-		if(current_node == key) {
-			mutex_unlock(&my_mutex);
-			return 1;
-		}
+
+	curr = pred->next;
+	printk("22");
+	while(curr->data < key){
+		printk("23");
+		pred = curr;
+		if(curr->data == 0x7FFFFFFF) break;
+		curr = curr->next;
+		printk("24");
 	}
-	
-	mutex_unlock(&my_mutex);
-	return 0;
+	if(key == curr->data){
+		printk("25");
+		mutex_unlock(&my_mutex);
+		return 0;
+	}
+	else{
+		printk("26");
+		mutex_unlock(&my_mutex);
+		return 0;
+	}
+
 }
-
-
 
 int ThreadFunc(void *data){
 	int*arg = (int*)data;
@@ -121,7 +196,7 @@ int ThreadFunc(void *data){
 		get_random_bytes(&n, sizeof(int));
 		key = n % KEY_RANGE;
 		if(key < 0) key = -key;
-		printk("key: %d", key);
+		//printk("key: %d", key);
 		
 		switch(key % 3){
 		case 0: 
@@ -152,15 +227,21 @@ int test(void){
 	struct timespec spclock[2];
 	struct timeval start, end;
 	
-	
+	printk("1");
 	mutex_init(&my_mutex);
+	printk("2");
 	int tot_thread;
 	for(tot_thread = 1; tot_thread <= 32; tot_thread *= 2){
-		INIT_LIST_HEAD(&my_list);
+		init(&my_list);
+		printk("3");
+		init(&freelist);
+		printk("4");
 		finishthread = 0;
 		
 		
+		mutex_lock(&my_mutex);
 		getnstimeofday(&spclock[0]);
+		mutex_unlock(&my_mutex);
 		 
 		 int i;
 		 for(i = 0; i < tot_thread; i++){
@@ -168,8 +249,6 @@ int test(void){
 			*arg = i;
 			kthread_run(&ThreadFunc, (void*)arg, "ThreadFunc");
 		 }
-		
-		
 		
 		while(true){
 			if(finishthread == tot_thread){
@@ -179,8 +258,20 @@ int test(void){
 			msleep(1);
 		}
 		
+		mutex_lock(&my_mutex);
 		getnstimeofday(&spclock[1]);
-		printk("Thread[%d], total_times: %15lluns\n", tot_thread, calclock(spclock));
+		if(tot_thread < 10)
+			printk("Thread[%d],  total_times: %15llums\n", tot_thread, calclock(spclock));
+		else
+			printk("Thread[%d], total_times: %15llums\n", tot_thread, calclock(spclock));
+		mutex_unlock(&my_mutex);
+	}
+	
+	struct my_node *p = head -> next;
+	while(p != &tail){
+		printk("%d\n", p->data);
+		if(p->data == 0x7FFFFFFF) break;
+		p = p->next;
 	}
 	return 0;
 }

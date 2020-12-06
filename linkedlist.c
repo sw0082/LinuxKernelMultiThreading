@@ -10,8 +10,8 @@
 #include <linux/mutex.h>
 #include <linux/random.h>
 
-#define NUM_OF_ITERS 100
-#define NUM_OF_THREADS 1
+#define NUM_OF_ITERS 10000
+#define NUM_OF_THREADS 8
 #define BILLION 1000000
 #define KEY_RANGE 1000
 
@@ -35,11 +35,12 @@ struct list_head *p;
 
 struct mutex my_mutex;
 int finishthread;
+int numnode;
 
 struct task_struct *k_thread[NUM_OF_THREADS];
 
 unsigned long long calclock(struct timespec *spclock){
-	long temp, temp_n;
+	long long temp, temp_n;
 	unsigned long long timedelay = 0;
 	if(spclock[1].tv_nsec >= spclock[0].tv_nsec){
 		temp = spclock[1].tv_sec - spclock[0].tv_sec;
@@ -63,16 +64,21 @@ int addlist(int key, void *data){
 	
 	mutex_lock(&my_mutex);
 	list_for_each_entry(current_node, &my_list, list){
-		if(current_node == key) {
-			mutex_unlock(&my_mutex);
-			return 1;
-		}
+		if(current_node->data >= key) break;
 	}
-	list_add_tail(&new->list, &my_list);
-	printk("Add list, key: %d, thread %d", key, *arg);
-	mutex_unlock(&my_mutex);
-	
-	return 0;
+	if(key != current_node->data){
+		struct my_node *new = kmalloc(sizeof(struct my_node), GFP_KERNEL);
+		new->data = key;
+		//list_add_tail(&new->list, &my_list);
+		list_add_tail(&new->list,  &current_node->list);
+		//printk("Add list, key: %d, thread %d\n", key, *arg);
+		mutex_unlock(&my_mutex);
+		return 0;
+	}
+	else{
+		mutex_unlock(&my_mutex);
+		//printk("Add list Fail, key: %d, thread %d\n", key, *arg);
+	}
 }
 
 int removelist(int key, void *data){
@@ -83,12 +89,14 @@ int removelist(int key, void *data){
 	mutex_lock(&my_mutex);
 	list_for_each_entry_safe(current_node, tmp, &my_list, list){
 		if(current_node->data == key){
+			//printk("Delete list, key: %d, thread %d\n", key, *arg);
 			list_del(&current_node->list);
 			kfree(current_node);
 			mutex_unlock(&my_mutex);
-			return 1;
+			return 0;
 		}
 	}
+	//printk("Delete Fail, key: %d, thread %d\n", key, *arg);
 	mutex_unlock(&my_mutex);
 	
 	return 0;
@@ -99,12 +107,13 @@ int containlist(int key, void *data){
 	
 	mutex_lock(&my_mutex);
 	list_for_each_entry(current_node, &my_list, list){
-		if(current_node == key) {
+		if(current_node->data == key) {
+			//printk("Contain list, key: %d, thread %d\n", key, *arg);
 			mutex_unlock(&my_mutex);
-			return 1;
+			return 0;
 		}
 	}
-	
+	//printk("Contain Fail, key: %d, thread %d\n", key, *arg);
 	mutex_unlock(&my_mutex);
 	return 0;
 }
@@ -119,9 +128,9 @@ int ThreadFunc(void *data){
 	int key;
 	for(i = 0; i < NUM_OF_ITERS; i++){
 		get_random_bytes(&n, sizeof(int));
+		if(n < 0) n = -n;
 		key = n % KEY_RANGE;
-		if(key < 0) key = -key;
-		printk("key: %d", key);
+		//rintk("key: %d\n", key);
 		
 		switch(key % 3){
 		case 0: 
@@ -134,11 +143,17 @@ int ThreadFunc(void *data){
 			containlist(key, (void*)arg);
 			break;
 		default:
-			printk("Error");
+			printk("Error\n");
 			return -1;
-		
 		}
-	}
+		/*mutex_lock(&my_mutex);
+		printk("LIST START");
+		list_for_each_entry(current_node, &my_list, list){
+			printk("current list: %d\n", current_node->data);
+		}
+		mutex_unlock(&my_mutex);*/
+		}
+	
 	finishthread++;
 	kfree(arg);
 	return 0;

@@ -1,1 +1,0 @@
-cmd_/home/sangwoo/git/LinuxKernelMultiThreading/original_linkedlist.ko := ld -r -m elf_x86_64  -z max-page-size=0x200000  --build-id  -T ./scripts/module-common.lds -o /home/sangwoo/git/LinuxKernelMultiThreading/original_linkedlist.ko /home/sangwoo/git/LinuxKernelMultiThreading/original_linkedlist.o /home/sangwoo/git/LinuxKernelMultiThreading/original_linkedlist.mod.o;  true
